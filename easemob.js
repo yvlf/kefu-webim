@@ -29,6 +29,23 @@
 			|| window.mozRTCPeerConnection
 			|| window.RTCPeerConnection
 		)
+		, isArray: Array.isArray || function(obj) {
+			return toString.call(obj) === '[object Array]';
+		}
+		, filesizeFormat: function(filesize){
+			var UNIT_ARRAY = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB'];
+			var exponent;
+			var result;
+
+			if(filesize){
+				exponent = Math.floor(Math.log(filesize) / Math.log(1024));
+				result = (filesize / Math.pow(1024, exponent)).toFixed(2) + ' ' + UNIT_ARRAY[exponent];
+			}
+			else{
+				result = '0 B';
+			}
+			return result;
+		}
 		, uuid: function () {
 			var s = [], hexDigits = '0123456789abcdef';
 
@@ -323,17 +340,16 @@
 			return document.visibilityState && document.visibilityState === 'hidden' || document.hidden;
 		}
 		, setStore: function ( key, value ) {
-			if ( typeof value === 'undefined' ) {
-				return;
-			}
 			try {
 				localStorage.setItem(key, value);
-			} catch ( e ) {}
+			}
+			catch (e){}
 		}
 		, getStore: function ( key ) {
 			try {
 				return localStorage.getItem(key);
-			} catch ( e ) {}
+			}
+			catch (e){}
 		}
 		, clearStore: function ( key ) {
 			try {
@@ -345,14 +361,23 @@
 				localStorage.clear();
 			} catch ( e ) {}
 		}
-		, set: function ( key, value ) {
+		, set: function (key, value, expiration) {
 			var date = new Date();
-			date.setTime(date.getTime() + 30*24*3600*1000);
+			// 过期时间默认为30天
+			var expiresTime = date.getTime() + (expiration || 30) * 24 * 3600 * 1000;
+			date.setTime(expiresTime);
 			document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + ';path=/;expires=' + date.toGMTString();
 		}
-		, get: function ( key ) {
-			var results = document.cookie.match('(^|;) ?' + encodeURIComponent(key) + '=([^;]*)(;|$)'); 
-			return results ? decodeURIComponent(results[2]) : '';
+		, get: function (key) {
+			var matches = document.cookie.match('(^|;) ?' + encodeURIComponent(key) + '=([^;]*)(;|$)');
+			var results;
+			if(matches){
+				results = decodeURIComponent(matches[2]);
+			}
+			else {
+				results = '';
+			}
+			return results;
 		}
 		, getAvatarsFullPath: function ( url, domain ) {
 			var returnValue = null;
@@ -533,6 +558,8 @@ easemobIM.Transfer = easemobim.Transfer = (function () {
 	'use strict'
    
 	var handleMsg = function ( e, callback, accept ) {
+		// 微信调试工具会传入对象，导致解析出错
+		if('string' !== typeof e.data) return;
 		var msg = JSON.parse(e.data);
 
 
@@ -840,7 +867,7 @@ easemobim.titleSlide = function () {
 		me.config.parentId = me.iframe.id;
 
 		me.message
-		.send(me.config)
+		.send({event: 'initConfig', data: me.config})
 		.listen(function ( msg ) {
 
 			if ( msg.to !== me.iframe.id ) { return; }
@@ -906,6 +933,9 @@ easemobim.titleSlide = function () {
 				case 'setItem':
 					utils.setStore(msg.data.key, msg.data.value);
 					break;
+				case 'updateURL':
+					me.message.send({event: 'updateURL', data: location.href});
+					break;
 				default:
 					break;
 			};
@@ -935,7 +965,7 @@ easemobim.titleSlide = function () {
 		}
 
 		this.url = '';
-		// IE6-	8 不支持修改iframe名称
+		// IE6-8 不支持修改iframe名称
 		this.iframe = (/MSIE (6|7|8)/).test(navigator.userAgent)
 			? document.createElement('<iframe name="' + new Date().getTime() + '">')
 			: document.createElement('iframe');
@@ -1006,7 +1036,13 @@ easemobim.titleSlide = function () {
 		typeof this.config.ticket !== 'undefined' && this.config.ticket !== '' && (destUrl.ticket = this.config.ticket);
 
 
-		this.url = utils.updateAttribute(this.url, destUrl, config.path);
+		// benz patch
+		if(config.h5Origin){
+			this.url = easemobim.utils.updateAttribute(this.ur, destUrl, config.path.replace(config.domain, config.h5Origin));
+		}
+		else {
+			this.url = easemobim.utils.updateAttribute(this.ur, destUrl, config.path);
+		}
 
 		if ( !this.config.user.username ) {
 			// [to + ] tenantId [ + emgroup]
@@ -1136,21 +1172,19 @@ easemobim.titleSlide = function () {
 	};
 
 	// 发ext消息
-	Iframe.prototype.send = function ( ext ) {
-		easemobim.EVENTS.EXT.data = ext;	
-		this.message.send(easemobim.EVENTS.EXT);
+	Iframe.prototype.send = function(extMsg) {
+		this.message.send({event: 'ext', data: extMsg});
 	};
 
 	// 发文本消息
-	Iframe.prototype.sendText = function ( msg ) {
-		easemobim.EVENTS.TEXTMSG.data = msg;	
-		this.message.send(easemobim.EVENTS.TEXTMSG);
+	Iframe.prototype.sendText = function(msg) {
+		this.message.send({event: 'textmsg', data: msg});
 	};
 
 	easemobim.Iframe = Iframe;
 }(
 	easemobim.utils
-	));
+));
 
 /*
  * 环信移动客服WEB访客端插件接入js
@@ -1160,7 +1194,7 @@ easemobim.titleSlide = function () {
 	'use strict';
 	var utils = easemobim.utils;
 	easemobim.config = easemobim.config || {};
-	easemobim.version = '43.11';
+	easemobim.version = 'benz.43.12.002.02';
 	easemobim.tenants = {};
 
 	var DEFAULT_CONFIG = {
@@ -1172,11 +1206,12 @@ easemobim.titleSlide = function () {
 		path: '',
 		ticket: true,
 		staticPath: '',
-		buttonText: '联系客服',
+		buttonText: '联系奔驰',
 		dialogWidth: '360px',
 		dialogHeight: '550px',
 		dragenable: true,
 		minimum: true,
+		hideKeyboard: true,
 		soundReminder: true,
 		dialogPosition: { x: '10px', y: '10px' },
 		user: {
@@ -1223,7 +1258,7 @@ easemobim.titleSlide = function () {
 		_config.domain = _config.domain || baseConfig.domain;
 		_config.path = _config.path || (baseConfig.domain + '/webim');
 		_config.staticPath = _config.staticPath || (baseConfig.domain + '/webim/static');
-	};
+	}
 
 	/*
 	 * @param: {String} 技能组名称，选填
@@ -1298,6 +1333,22 @@ easemobim.titleSlide = function () {
 			a.setAttribute('href', iframe.url);
 			a.setAttribute('target', '_blank');
 
+			// benz patch
+			if(easemobim.config.h5Origin){
+				// 避免缓存配置
+				reset();
+				utils.extend(_config, config);
+				a.setAttribute(
+					'href',
+					iframe.url + '&ext='
+						+ easemobim.utils.code.encode(
+							encodeURIComponent(JSON.stringify({
+								ext: _config.extMsg,
+								visitor: _config.visitor
+							}))
+					)
+				)
+			}
 		}
 	};
 
@@ -1331,6 +1382,8 @@ easemobim.titleSlide = function () {
 		iframe = easemobim.tenants[cacheKeyName] || easemobim.Iframe(_config);
 		easemobim.tenants[cacheKeyName] = iframe;
 		iframe.set(_config, iframe.close);
+		// 访客上报用后失效
+		easemobim.config.eventCollector = false;
 	}
 
 	//support cmd & amd
