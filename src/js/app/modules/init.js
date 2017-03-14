@@ -182,11 +182,11 @@
 			utils.addClass(document.body, 'em-mobile');
 		}
 
-		// 留言按钮
-		utils.toggleClass(
-			document.querySelector('.em-widget-note'),
-			'hide', !config.ticket
-		);
+		// // 留言按钮
+		// utils.toggleClass(
+		// 	document.querySelector('.em-widget-note'),
+		// 	'hide', !config.ticket
+		// );
 
 		// 最小化按钮
 		utils.toggleClass(

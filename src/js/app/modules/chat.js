@@ -834,9 +834,9 @@
 
 				me.conn.open(op);
 
-				Modernizr.peerconnection
-					&& config.grayList.audioVideo
-					&& easemobim.videoChat.init(me.conn, me.channel.sendText, config);
+				// Modernizr.peerconnection
+				// 	&& config.grayList.audioVideo
+				// 	&& easemobim.videoChat.init(me.conn, me.channel.sendText, config);
 			},
 			soundReminder: function () {
 				if (!window.HTMLAudioElement || utils.isMobile || !config.soundReminder) {
