@@ -234,22 +234,24 @@
 			api('getRelevanceList', {
 				tenantId: config.tenantId
 			}, function (msg) {
-				if (msg.data.length === 0) {
+				var relevanceList = msg.data;
+				var firstItem = relevanceList[0];
+				if (!relevanceList.length) {
 					chat.errorPrompt('未创建关联', true);
 					return;
 				}
-				config.relevanceList = msg.data;
-				config.tenantAvatar = utils.getAvatarsFullPath(msg.data[0].tenantAvatar, config.domain);
+				config.tenantAvatar = utils.getAvatarsFullPath(firstItem.tenantAvatar, config.domain);
 				config.defaultAvatar = config.staticPath ? config.staticPath + '/img/default_avatar.png' : 'static' +
 					'/img/default_avatar.png';
-				config.defaultAgentName = msg.data[0].tenantName;
-				config.logo = config.logo || msg.data[0].tenantLogo;
-				config.toUser = config.toUser || msg.data[0].imServiceNumber;
-				config.orgName = config.orgName || msg.data[0].orgName;
-				config.appName = config.appName || msg.data[0].appName;
-				config.channelid = config.channelid || msg.data[0].channelId;
+				config.defaultAgentName = firstItem.tenantName;
+				config.logo = config.logo || firstItem.tenantLogo;
+				config.toUser = config.toUser || firstItem.imServiceNumber;
+				config.orgName = config.orgName || firstItem.orgName;
+				config.appName = config.appName || firstItem.appName;
+				config.channelid = config.channelid || firstItem.channelId;
+
 				config.appKey = config.appKey || config.orgName + '#' + config.appName;
-				config.restServer = config.restServer || msg.data[0].restDomain;
+				config.restServer = config.restServer || firstItem.restDomain;
 				var cluster = config.restServer ? config.restServer.match(/vip\d/) : '';
 				cluster = cluster && cluster.length ? '-' + cluster[0] : '';
 				config.xmppServer = config.xmppServer || 'im-api' + cluster + '.easemob.com';
@@ -422,6 +424,7 @@
 				utils.set('root' + config.tenantId + config.emgroup, config.user.username);
 			}
 			else {
+				// todo: directly transfer key & value to write cookies
 				transfer.send({
 					event: _const.EVENTS.CACHEUSER,
 					data: {
